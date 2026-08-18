@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>号機検査 OK登録</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f4f6f8;
+      margin: 0;
+      padding: 15px;
+      text-align: center;
+      color: #333;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      max-width: 480px;
+      margin: 0 auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h2 { margin-top: 0; color: #1a73e8; font-size: 1.2rem; }
+    
+    .step-badge {
+      background: #e8f0fe;
+      color: #1a73e8;
+      padding: 10px 15px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 0.95rem;
+      display: inline-block;
+      margin-bottom: 12px;
+    }
+
+    #reader {
+      width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      margin: 10px 0;
+    }
+
+    /* 検査員選択エリアのスタイル */
+    .inspector-select-area {
+      margin: 15px 0;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #dadce0;
+      text-align: left;
+    }
+    .inspector-select-area label {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #5f6368;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .inspector-select-area select {
+      width: 100%;
+      padding: 10px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background-color: #fff;
+    }
+
+    .data-tag {
+      background: #f1f3f4;
+      border: 1px solid #dadce0;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      text-align: left;
+      margin-top: 10px;
+    }
+    .data-tag strong { color: #1a73e8; }
+
+    .status-box {
+      padding: 15px;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 0.95rem;
+      margin-top: 15px;
+      display: none;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+    .status-ok { background: #e6f4ea; color: #137333; border: 2px solid #34a853; }
+    .status-ng { background: #fce8e6; color: #c5221f; border: 2px solid #ea4335; }
+    .status-loading { background: #e8f0fe; color: #1a73e8; border: 1px solid #1a73e8; }
+
+    .btn-reset {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 14px 20px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      margin-top: 15px;
+      cursor: pointer;
+      display: none;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>📋 号機検査 OK登録</h2>
+  
+  <div id="stepGuide" class="step-badge">1. 製造番号QRを読み取ってください</div>
+
+  <!-- カメラ読み取り画面 -->
+  <div id="reader"></div>
+
+  <!-- ステップ2時に表示される検査員リストボックス（手動選択用） -->
+  <div id="inspectorSelectContainer" class="inspector-select-area" style="display:none;">
+    <label for="inspectorSelect">👤 検査員コードをリストから選択（またはQRを読み取り）:</label>
+    <select id="inspectorSelect" onchange="onInspectorSelectChange()">
+      <option value="">-- リストから選択 --</option>
+    </select>
+  </div>
+
+  <div id="scannedInfo" class="data-tag" style="display:none;">
+    <div>📦 製造番号QR: <strong id="tagMachine">-</strong></div>
+    <div id="tagInspectorRow" style="display:none;">👤 検査員コード: <strong id="tagInspector">-</strong></div>
+  </div>
+
+  <div id="status" class="status-box"></div>
+  
+  <button id="resetBtn" class="btn-reset" onclick="resetAll()">次の検査を開始する</button>
+</div>
+
+<script>
+  // 【重要】ご自身のGASのデプロイURL
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwmO35v4FveK_u-9wqi0tcfptCX8gpcBdtW0B1ejvZtKxqy5BFfXv-Z-rdljWeuPhiZFA/exec";
+
+  let step = 1;
+  let machineQrData = "";
+  let inspectorIdData = "";
+
+  let html5QrcodeScanner = null;
+  let isProcessing = false;
+
+  // 設定シートから取得した検査員コードを保持する配列
+  let registeredInspectors = ["B", "G", "I", "J", "K", "P", "Q", "W", "X"]; // デフォルト値
+
+  window.onload = () => {
+    fetchInspectorList();
+    startScanner();
+  };
+
+  // GAS（GETリクエスト）から「設定」シートの検査員リストを取得
+  function fetchInspectorList() {
+    fetch(GAS_API_URL + "?action=getInspectors")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.inspectors) && data.inspectors.length > 0) {
+          registeredInspectors = data.inspectors;
+        }
+        updateInspectorDropdown();
+      })
+      .catch(err => {
+        console.warn("検査員リストの取得に失敗しました。デフォルト値を使用します。", err);
+        updateInspectorDropdown();
+      });
+  }
+
+  // リストボックスの選択肢を生成
+  function updateInspectorDropdown() {
+    const selectEl = document.getElementById("inspectorSelect");
+    selectEl.innerHTML = '<option value="">-- リストから選択 --</option>';
+
+    registeredInspectors.forEach(code => {
+      const opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = `${code} （検査員）`;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  function startScanner() {
+    isProcessing = false;
+    html5QrcodeScanner = new Html5Qrcode("reader");
+
+    const config = {
+      fps: 15,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0
+    };
+
+    html5QrcodeScanner.start(
+      { facingMode: "environment" },
+      config,
+      onScanSuccess
+    ).catch(err => {
+      showStatus("❌ カメラ起動エラー: " + err, "ng");
+    });
+  }
+
+  async function onScanSuccess(decodedText) {
+    if (isProcessing) return;
+    isProcessing = true;
+
+    if (step === 1) {
+      // ------------------------------------------------
+      // ステップ1: 製造番号QRの読み取り
+      // ------------------------------------------------
+      machineQrData = decodedText.trim();
+      
+      document.getElementById("tagMachine").innerText = machineQrData;
+      document.getElementById("scannedInfo").style.display = "block";
+      document.getElementById("stepGuide").innerText = "2. 検査員QRを読み取るか、リストから選択してください";
+      document.getElementById("stepGuide").style.background = "#feefc3";
+      document.getElementById("stepGuide").style.color = "#b06000";
+
+      // 検査員選択リストボックスを表示
+      document.getElementById("inspectorSelectContainer").style.display = "block";
+
+      await html5QrcodeScanner.stop();
+      step = 2;
+      isProcessing = false;
+      startScanner();
+
+    } else if (step === 2) {
+      // ------------------------------------------------
+      // ステップ2: 検査員QRの読み取り & バリデーション
+      // ------------------------------------------------
+      const readVal = decodedText.trim().toUpperCase();
+
+      // チェック1: アルファベット1文字か
+      const isSingleLetter = /^[A-Z]$/.test(readVal);
+      // チェック2: 登録済みリストに含まれているか
+      const isRegistered = registeredInspectors.includes(readVal);
+
+      if (!isSingleLetter || !isRegistered) {
+        // 条件に合致しないQR（他のQRなど）を読み込んだ場合は警告を出して再読み込み
+        showStatus(`❌ エラー: 「${readVal}」は無効な検査員コードです。\n登録済みの検査員QR（半角英字1文字）をかざしてください。`, "ng");
+        isProcessing = false;
+        return; // 次の判定に進まずそのままカメラ継続
+      }
+
+      // 正しい検査員コードが読み取れた場合
+      document.getElementById("inspectorSelect").value = readVal;
+      await processSubmit(readVal);
+    }
+  }
+
+  // ドロップダウンリストから手動選択された時の処理
+  async function onInspectorSelectChange() {
+    if (step !== 2) return;
+    
+    const selectEl = document.getElementById("inspectorSelect");
+    const selectedVal = selectEl.value;
+
+    if (selectedVal) {
+      isProcessing = true;
+      if (html5QrcodeScanner) {
+        await html5QrcodeScanner.stop();
+      }
+      await processSubmit(selectedVal);
+    }
+  }
+
+  // 最終送信処理（スプレッドシートへの登録処理）
+  async function processSubmit(inspectorCode) {
+    inspectorIdData = inspectorCode;
+    
+    document.getElementById("tagInspector").innerText = inspectorIdData;
+    document.getElementById("tagInspectorRow").style.display = "block";
+    document.getElementById("inspectorSelectContainer").style.display = "none";
+
+    showStatus("⌛ 登録処理中...", "loading");
+
+    try {
+      const response = await fetch(GAS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({
+          machineQr: machineQrData,
+          inspectorId: inspectorIdData
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        showStatus(result.message, "ok");
+      } else {
+        showStatus(result.message, "ng");
+      }
+
+    } catch (err) {
+      showStatus("❌ 通信エラー: " + err.message, "ng");
+    }
+
+    document.getElementById("resetBtn").style.display = "block";
+  }
+
+  function showStatus(htmlText, type) {
+    const statusBox = document.getElementById("status");
+    statusBox.className = "status-box status-" + type;
+    statusBox.innerText = htmlText;
+    statusBox.style.display = "block";
+  }
+
+  function resetAll() {
+    step = 1;
+    machineQrData = "";
+    inspectorIdData = "";
+    
+    document.getElementById("scannedInfo").style.display = "none";
+    document.getElementById("tagInspectorRow").style.display = "none";
+    document.getElementById("status").style.display = "none";
+    document.getElementById("resetBtn").style.display = "none";
+    document.getElementById("inspectorSelectContainer").style.display = "none";
+    document.getElementById("inspectorSelect").value = "";
+
+    document.getElementById("stepGuide").innerText = "1. 製造番号QRを読み取ってください";
+    document.getElementById("stepGuide").style.background = "#e8f0fe";
+    document.getElementById("stepGuide").style.color = "#1a73e8";
+
+    startScanner();
+  }
+</script>
+
+</body>
+</html>
