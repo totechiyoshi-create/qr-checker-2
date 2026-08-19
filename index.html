@@ -25,7 +25,6 @@
     }
     h2 { margin-top: 0; color: #1a73e8; font-size: 1.2rem; }
     
-    /* ログインユーザー情報 & ログアウトボタン */
     .user-bar {
       display: flex;
       justify-content: space-between;
@@ -49,7 +48,6 @@
       font-weight: bold;
     }
 
-    /* ログイン画面のスタイル */
     .login-box {
       text-align: left;
       margin-top: 15px;
@@ -101,7 +99,6 @@
       margin: 10px 0;
     }
 
-    /* 汎用端末時の検査員選択エリア */
     .inspector-select-area {
       margin: 15px 0;
       padding: 12px;
@@ -124,6 +121,72 @@
       border-radius: 6px;
       border: 1px solid #ccc;
       background-color: #fff;
+    }
+
+    /* 新設: 検査詳細入力エリアのスタイル */
+    .detail-input-area {
+      margin: 15px 0;
+      padding: 15px;
+      background: #fdfdfd;
+      border: 2px solid #1a73e8;
+      border-radius: 12px;
+      text-align: left;
+    }
+    .detail-title {
+      font-weight: bold;
+      font-size: 0.95rem;
+      color: #1a73e8;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .grid-btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .grid-btns-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .btn-opt {
+      background: #f1f3f4;
+      border: 1px solid #dadce0;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      color: #333;
+    }
+    .btn-opt.active {
+      background: #1a73e8;
+      color: white;
+      border-color: #1a73e8;
+    }
+    .num-input {
+      width: 100%;
+      padding: 12px;
+      font-size: 1.1rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      margin: 10px 0;
+      text-align: center;
+    }
+    .btn-submit-detail {
+      background: #34a853;
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      width: 100%;
+      cursor: pointer;
+      margin-top: 10px;
     }
 
     .data-tag {
@@ -189,7 +252,6 @@
 
   <!-- 2. メイン機能エリア（QR読み取り等） -->
   <div id="mainSection" style="display:none;">
-    <!-- ユーザー表示バー & ログアウトボタン -->
     <div class="user-bar">
       <span>👤 ログイン中: <strong id="currentUserDisplay">-</strong></span>
       <button class="btn-logout" onclick="handleLogout()">ログアウト</button>
@@ -208,6 +270,32 @@
       </select>
     </div>
 
+    <!-- 検査詳細選択フォームエリア -->
+    <div id="detailSection" class="detail-input-area" style="display:none;">
+      <div class="detail-title">📝 検査種別を選択してください</div>
+      
+      <!-- メインボタン群 -->
+      <div class="grid-btns">
+        <button class="btn-opt" onclick="selectType('OK')">OK</button>
+        <button class="btn-opt" onclick="selectType('E寸')">E寸</button>
+        <button class="btn-opt" onclick="selectType('K寸')">K寸</button>
+        <button class="btn-opt" onclick="selectType('打痕')">打痕</button>
+      </div>
+
+      <!-- E寸・K寸用 サブ選択エリア -->
+      <div id="subDimArea" style="display:none;">
+        <hr style="border:0; border-top:1px dashed #ccc; margin:10px 0;">
+        <div style="font-size:0.85rem; font-weight:bold; margin-bottom:6px;">状態を選択:</div>
+        <div class="grid-btns-3">
+          <button id="btnStateOK" class="btn-opt" onclick="selectSubState('OK')">OK</button>
+          <button id="btnStateAge" class="btn-opt" onclick="selectSubState('上げ')">上げ</button>
+          <button id="btnStateSage" class="btn-opt" onclick="selectSubState('下げ')">下げ</button>
+        </div>
+        <input type="number" id="dimValueInput" class="num-input" step="any" placeholder="数値を入力（例: 1.732）" />
+        <button class="btn-submit-detail" onclick="submitDimension()">決定して登録</button>
+      </div>
+    </div>
+
     <div id="scannedInfo" class="data-tag" style="display:none;">
       <div>📦 製造番号QR: <strong id="tagMachine">-</strong></div>
       <div id="tagInspectorRow" style="display:none;">👤 検査員コード: <strong id="tagInspector">-</strong></div>
@@ -220,18 +308,19 @@
 </div>
 
 <script>
-  // 【重要】ご自身のGASのデプロイURL
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyhLy41s43b2w9NPrwO4o87ZdCrNWZv_ZAfMHjlVh6rHQsvQ25NbvdEHCPmkgTWZeMz9g/exec";
 
   let step = 1;
-  let loggedInUser = ""; // 現在ログイン中の検査員コード
+  let loggedInUser = "";
   let machineQrData = "";
   let inspectorIdData = "";
+
+  let selectedCheckType = ""; // "OK", "E寸", "K寸", "打痕"
+  let selectedSubState = "";  // "OK", "上げ", "下げ"
 
   let html5QrcodeScanner = null;
   let isProcessing = false;
 
-  // 設定シートから取得した検査員コード（デフォルト値）
   let registeredInspectors = ["B", "G", "I", "J", "K", "P", "Q", "W", "X"];
 
   window.onload = () => {
@@ -239,7 +328,6 @@
     checkExistingLogin();
   };
 
-  // 1. GASから「設定」シートの検査員リストを取得
   function fetchInspectorList() {
     fetch(GAS_API_URL + "?action=getInspectors")
       .then(res => res.json())
@@ -250,29 +338,24 @@
         updateInspectorDropdowns();
       })
       .catch(err => {
-        console.warn("検査員リスト取得エラー。デフォルト値を使用します。", err);
+        console.warn("検査員リスト取得エラー", err);
         updateInspectorDropdowns();
       });
   }
 
-  // 2. ドロップダウン（ログイン用 ＆ 汎用端末用）を更新
   function updateInspectorDropdowns() {
     const loginSel = document.getElementById("loginSelect");
     const inspectorSel = document.getElementById("inspectorSelect");
 
-    // ログイン用ドロップダウン
     loginSel.innerHTML = '<option value="">-- リストから選択 --</option><option value="0000">0000（汎用端末）</option>';
-    // 汎用端末用ドロップダウン
     inspectorSel.innerHTML = '<option value="">-- リストから選択 --</option>';
 
     registeredInspectors.forEach(code => {
-      // ログイン画面用
       const opt1 = document.createElement("option");
       opt1.value = code;
       opt1.textContent = `${code} （検査員）`;
       loginSel.appendChild(opt1);
 
-      // 汎用端末用
       const opt2 = document.createElement("option");
       opt2.value = code;
       opt2.textContent = `${code} （検査員）`;
@@ -284,7 +367,6 @@
     if (val) document.getElementById("loginInput").value = val;
   }
 
-  // 3. 保存されたログイン情報の確認
   function checkExistingLogin() {
     const savedUser = localStorage.getItem("INSPECTOR_CODE");
     if (savedUser) {
@@ -296,7 +378,6 @@
     }
   }
 
-  // 4. ログイン処理
   function handleLogin() {
     const inputVal = document.getElementById("loginInput").value.trim().toUpperCase();
 
@@ -305,17 +386,15 @@
       return;
     }
 
-    // 判定: 「0000」 または 登録済みの検査員コード
     if (inputVal === "0000" || registeredInspectors.includes(inputVal)) {
       loggedInUser = inputVal;
       localStorage.setItem("INSPECTOR_CODE", loggedInUser);
       showMainScreen();
     } else {
-      alert(`❌ エラー: 「${inputVal}」は無効なコードです。\n有効なコード: 0000 または ${registeredInspectors.join(", ")}`);
+      alert(`❌ エラー: 「${inputVal}」は無効なコードです。`);
     }
   }
 
-  // 5. ログアウト処理
   async function handleLogout() {
     if (confirm("ログアウトしますか？")) {
       localStorage.removeItem("INSPECTOR_CODE");
@@ -332,19 +411,16 @@
     }
   }
 
-  // 6. メイン画面の初期表示制御
   function showMainScreen() {
     document.getElementById("loginSection").style.display = "none";
     document.getElementById("mainSection").style.display = "block";
     
-    // ログインユーザー名表示（0000の場合は「汎用端末」と明記）
     const dispName = (loggedInUser === "0000") ? "0000（汎用端末）" : `${loggedInUser}`;
     document.getElementById("currentUserDisplay").innerText = dispName;
 
     resetAll();
   }
 
-  // 7. カメラ起動
   function startScanner() {
     isProcessing = false;
     html5QrcodeScanner = new Html5Qrcode("reader");
@@ -364,21 +440,16 @@
     });
   }
 
-  // 8. QR読み取りイベント処理
   async function onScanSuccess(decodedText) {
     if (isProcessing) return;
     isProcessing = true;
 
     if (step === 1) {
-      // ------------------------------------------------
-      // ステップ1: 製造番号QRの読み取り
-      // ------------------------------------------------
       machineQrData = decodedText.trim();
       document.getElementById("tagMachine").innerText = machineQrData;
       document.getElementById("scannedInfo").style.display = "block";
 
       if (loggedInUser === "0000") {
-        // 【ケースA: 汎用端末モード】➔ 従来通りステップ2（検査員入力）へ進む
         document.getElementById("stepGuide").innerText = "2. 検査員QRを読み取るか、リストから選択してください";
         document.getElementById("stepGuide").style.background = "#feefc3";
         document.getElementById("stepGuide").style.color = "#b06000";
@@ -390,53 +461,120 @@
         startScanner();
 
       } else {
-        // 【ケースB: 個人ログインモード】➔ ステップ2をスキップし、ログイン中のコードで即登録！
+        // 個人端末の場合 ➔ 検査詳細選択エリアを表示
+        inspectorIdData = loggedInUser;
+        document.getElementById("tagInspector").innerText = inspectorIdData;
+        document.getElementById("tagInspectorRow").style.display = "block";
+
         await html5QrcodeScanner.stop();
-        await processSubmit(loggedInUser);
+        showDetailForm();
       }
 
     } else if (step === 2) {
-      // ------------------------------------------------
-      // ステップ2: 汎用端末時の検査員QR読み取り
-      // ------------------------------------------------
       const readVal = decodedText.trim().toUpperCase();
-
       const isSingleLetter = /^[A-Z]$/.test(readVal);
       const isRegistered = registeredInspectors.includes(readVal);
 
       if (!isSingleLetter || !isRegistered) {
-        showStatus(`❌ エラー: 「${readVal}」は無効な検査員コードです。\n登録済みの検査員QR（半角英字1文字）をかざしてください。`, "ng");
+        showStatus(`❌ エラー: 「${readVal}」は無効な検査員コードです。`, "ng");
         isProcessing = false;
         return;
       }
 
-      document.getElementById("inspectorSelect").value = readVal;
-      await processSubmit(readVal);
+      inspectorIdData = readVal;
+      document.getElementById("tagInspector").innerText = inspectorIdData;
+      document.getElementById("tagInspectorRow").style.display = "block";
+      document.getElementById("inspectorSelectContainer").style.display = "none";
+
+      await html5QrcodeScanner.stop();
+      showDetailForm();
     }
   }
 
-  // 汎用端末時にリストから選択された場合
   async function onInspectorSelectChange() {
     if (step !== 2) return;
     
     const selectedVal = document.getElementById("inspectorSelect").value;
     if (selectedVal) {
       isProcessing = true;
+      inspectorIdData = selectedVal;
+      document.getElementById("tagInspector").innerText = inspectorIdData;
+      document.getElementById("tagInspectorRow").style.display = "block";
+      document.getElementById("inspectorSelectContainer").style.display = "none";
+
       if (html5QrcodeScanner) {
         await html5QrcodeScanner.stop();
       }
-      await processSubmit(selectedVal);
+      showDetailForm();
     }
   }
 
-  // 9. スプレッドシート登録送信処理
-  async function processSubmit(inspectorCode) {
-    inspectorIdData = inspectorCode;
-    
-    document.getElementById("tagInspector").innerText = inspectorIdData;
-    document.getElementById("tagInspectorRow").style.display = "block";
-    document.getElementById("inspectorSelectContainer").style.display = "none";
+  // ----------------------------------------------------
+  // 検査詳細入力フォームの画面制御
+  // ----------------------------------------------------
+  function showDetailForm() {
+    document.getElementById("stepGuide").innerText = "3. 検査結果を選択してください";
+    document.getElementById("stepGuide").style.background = "#e8f0fe";
+    document.getElementById("stepGuide").style.color = "#1a73e8";
 
+    document.getElementById("detailSection").style.display = "block";
+    document.getElementById("subDimArea").style.display = "none";
+    selectedCheckType = "";
+    selectedSubState = "";
+    document.getElementById("dimValueInput").value = "";
+  }
+
+  // メイン種別ボタン（OK, E寸, K寸, 打痕）の選択
+  function selectType(type) {
+    selectedCheckType = type;
+
+    if (type === "OK") {
+      processSubmit({ checkType: "OK" });
+
+    } else if (type === "打痕") {
+      if (confirm("「打痕 確認」で登録しますか？")) {
+        processSubmit({ checkType: "打痕", state: "確認" });
+      }
+
+    } else if (type === "E寸" || type === "K寸") {
+      document.getElementById("subDimArea").style.display = "block";
+      selectSubState(""); // クリア
+    }
+  }
+
+  // E寸・K寸時のサブ状態（OK, 上げ, 下げ）の選択
+  function selectSubState(state) {
+    selectedSubState = state;
+    document.getElementById("btnStateOK").className = "btn-opt " + (state === "OK" ? "active" : "");
+    document.getElementById("btnStateAge").className = "btn-opt " + (state === "上げ" ? "active" : "");
+    document.getElementById("btnStateSage").className = "btn-opt " + (state === "下げ" ? "active" : "");
+  }
+
+  // E寸・K寸の確定登録処理
+  function submitDimension() {
+    if (!selectedSubState) {
+      alert("「OK」「上げ」「下げ」のいずれかを選択してください。");
+      return;
+    }
+
+    const val = document.getElementById("dimValueInput").value.trim();
+    if (!val) {
+      alert("数値を入力してください。");
+      return;
+    }
+
+    processSubmit({
+      checkType: selectedCheckType,
+      state: selectedSubState,
+      value: val
+    });
+  }
+
+  // ----------------------------------------------------
+  // スプレッドシート登録送信処理
+  // ----------------------------------------------------
+  async function processSubmit(detailData) {
+    document.getElementById("detailSection").style.display = "none";
     showStatus("⌛ 登録処理中...", "loading");
 
     try {
@@ -445,7 +583,8 @@
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({
           machineQr: machineQrData,
-          inspectorId: inspectorIdData
+          inspectorId: inspectorIdData,
+          detail: detailData
         })
       });
 
@@ -475,12 +614,15 @@
     step = 1;
     machineQrData = "";
     inspectorIdData = "";
+    selectedCheckType = "";
+    selectedSubState = "";
     
     document.getElementById("scannedInfo").style.display = "none";
     document.getElementById("tagInspectorRow").style.display = "none";
     document.getElementById("status").style.display = "none";
     document.getElementById("resetBtn").style.display = "none";
     document.getElementById("inspectorSelectContainer").style.display = "none";
+    document.getElementById("detailSection").style.display = "none";
     document.getElementById("inspectorSelect").value = "";
 
     document.getElementById("stepGuide").innerText = "1. 製造番号QRを読み取ってください";
