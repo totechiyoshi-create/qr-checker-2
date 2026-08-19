@@ -21,9 +21,67 @@
       max-width: 480px;
       margin: 0 auto;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      position: relative;
     }
     h2 { margin-top: 0; color: #1a73e8; font-size: 1.2rem; }
     
+    /* ログインユーザー情報 & ログアウトボタン */
+    .user-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #e8f0fe;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #1a73e8;
+    }
+    .btn-logout {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    /* ログイン画面のスタイル */
+    .login-box {
+      text-align: left;
+      margin-top: 15px;
+    }
+    .login-box label {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #5f6368;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .login-box select, .login-box input {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+    }
+    .btn-login {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      width: 100%;
+      cursor: pointer;
+    }
+
     .step-badge {
       background: #e8f0fe;
       color: #1a73e8;
@@ -43,7 +101,7 @@
       margin: 10px 0;
     }
 
-    /* 検査員選択エリアのスタイル */
+    /* 汎用端末時の検査員選択エリア */
     .inspector-select-area {
       margin: 15px 0;
       padding: 12px;
@@ -112,50 +170,76 @@
 
 <div class="card">
   <h2>📋 号機検査 OK登録</h2>
-  
-  <div id="stepGuide" class="step-badge">1. 製造番号QRを読み取ってください</div>
 
-  <!-- カメラ読み取り画面 -->
-  <div id="reader"></div>
+  <!-- 1. ログイン画面エリア -->
+  <div id="loginSection">
+    <div class="login-box">
+      <label for="loginSelect">👤 検査員コード（選択）:</label>
+      <select id="loginSelect" onchange="syncLoginInput(this.value)">
+        <option value="">-- リストから選択 --</option>
+        <option value="0000">0000（汎用端末）</option>
+      </select>
 
-  <!-- ステップ2時に表示される検査員リストボックス（手動選択用） -->
-  <div id="inspectorSelectContainer" class="inspector-select-area" style="display:none;">
-    <label for="inspectorSelect">👤 検査員コードをリストから選択（またはQRを読み取り）:</label>
-    <select id="inspectorSelect" onchange="onInspectorSelectChange()">
-      <option value="">-- リストから選択 --</option>
-    </select>
+      <label for="loginInput">または 直接入力（例: B, G, 0000）:</label>
+      <input type="text" id="loginInput" placeholder="検査員コードを入力" />
+
+      <button class="btn-login" onclick="handleLogin()">ログイン</button>
+    </div>
   </div>
 
-  <div id="scannedInfo" class="data-tag" style="display:none;">
-    <div>📦 製造番号QR: <strong id="tagMachine">-</strong></div>
-    <div id="tagInspectorRow" style="display:none;">👤 検査員コード: <strong id="tagInspector">-</strong></div>
-  </div>
+  <!-- 2. メイン機能エリア（QR読み取り等） -->
+  <div id="mainSection" style="display:none;">
+    <!-- ユーザー表示バー & ログアウトボタン -->
+    <div class="user-bar">
+      <span>👤 ログイン中: <strong id="currentUserDisplay">-</strong></span>
+      <button class="btn-logout" onclick="handleLogout()">ログアウト</button>
+    </div>
 
-  <div id="status" class="status-box"></div>
-  
-  <button id="resetBtn" class="btn-reset" onclick="resetAll()">次の検査を開始する</button>
+    <div id="stepGuide" class="step-badge">1. 製造番号QRを読み取ってください</div>
+
+    <!-- カメラ読み取り画面 -->
+    <div id="reader"></div>
+
+    <!-- 汎用端末（0000）時のみ表示される検査員選択エリア -->
+    <div id="inspectorSelectContainer" class="inspector-select-area" style="display:none;">
+      <label for="inspectorSelect">👤 検査員コードをリストから選択（またはQRを読み取り）:</label>
+      <select id="inspectorSelect" onchange="onInspectorSelectChange()">
+        <option value="">-- リストから選択 --</option>
+      </select>
+    </div>
+
+    <div id="scannedInfo" class="data-tag" style="display:none;">
+      <div>📦 製造番号QR: <strong id="tagMachine">-</strong></div>
+      <div id="tagInspectorRow" style="display:none;">👤 検査員コード: <strong id="tagInspector">-</strong></div>
+    </div>
+
+    <div id="status" class="status-box"></div>
+    
+    <button id="resetBtn" class="btn-reset" onclick="resetAll()">次の検査を開始する</button>
+  </div>
 </div>
 
 <script>
   // 【重要】ご自身のGASのデプロイURL
-  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyhLy41s43b2w9NPrwO4o87ZdCrNWZv_ZAfMHjlVh6rHQsvQ25NbvdEHCPmkgTWZeMz9g/exec";
+  const GAS_API_URL = "https://docs.google.com/spreadsheets/d/1NyV4FvAu9TQZI0vlDyRgN_ZCNWt-9rTCBe7gYnECHsM/edit?gid=0#gid=0";
 
   let step = 1;
+  let loggedInUser = ""; // 現在ログイン中の検査員コード
   let machineQrData = "";
   let inspectorIdData = "";
 
   let html5QrcodeScanner = null;
   let isProcessing = false;
 
-  // 設定シートから取得した検査員コードを保持する配列
-  let registeredInspectors = ["B", "G", "I", "J", "K", "P", "Q", "W", "X"]; // デフォルト値
+  // 設定シートから取得した検査員コード（デフォルト値）
+  let registeredInspectors = ["B", "G", "I", "J", "K", "P", "Q", "W", "X"];
 
   window.onload = () => {
     fetchInspectorList();
-    startScanner();
+    checkExistingLogin();
   };
 
-  // GAS（GETリクエスト）から「設定」シートの検査員リストを取得
+  // 1. GASから「設定」シートの検査員リストを取得
   function fetchInspectorList() {
     fetch(GAS_API_URL + "?action=getInspectors")
       .then(res => res.json())
@@ -163,27 +247,104 @@
         if (data.success && Array.isArray(data.inspectors) && data.inspectors.length > 0) {
           registeredInspectors = data.inspectors;
         }
-        updateInspectorDropdown();
+        updateInspectorDropdowns();
       })
       .catch(err => {
-        console.warn("検査員リストの取得に失敗しました。デフォルト値を使用します。", err);
-        updateInspectorDropdown();
+        console.warn("検査員リスト取得エラー。デフォルト値を使用します。", err);
+        updateInspectorDropdowns();
       });
   }
 
-  // リストボックスの選択肢を生成
-  function updateInspectorDropdown() {
-    const selectEl = document.getElementById("inspectorSelect");
-    selectEl.innerHTML = '<option value="">-- リストから選択 --</option>';
+  // 2. ドロップダウン（ログイン用 ＆ 汎用端末用）を更新
+  function updateInspectorDropdowns() {
+    const loginSel = document.getElementById("loginSelect");
+    const inspectorSel = document.getElementById("inspectorSelect");
+
+    // ログイン用ドロップダウン
+    loginSel.innerHTML = '<option value="">-- リストから選択 --</option><option value="0000">0000（汎用端末）</option>';
+    // 汎用端末用ドロップダウン
+    inspectorSel.innerHTML = '<option value="">-- リストから選択 --</option>';
 
     registeredInspectors.forEach(code => {
-      const opt = document.createElement("option");
-      opt.value = code;
-      opt.textContent = `${code} （検査員）`;
-      selectEl.appendChild(opt);
+      // ログイン画面用
+      const opt1 = document.createElement("option");
+      opt1.value = code;
+      opt1.textContent = `${code} （検査員）`;
+      loginSel.appendChild(opt1);
+
+      // 汎用端末用
+      const opt2 = document.createElement("option");
+      opt2.value = code;
+      opt2.textContent = `${code} （検査員）`;
+      inspectorSel.appendChild(opt2);
     });
   }
 
+  function syncLoginInput(val) {
+    if (val) document.getElementById("loginInput").value = val;
+  }
+
+  // 3. 保存されたログイン情報の確認
+  function checkExistingLogin() {
+    const savedUser = localStorage.getItem("INSPECTOR_CODE");
+    if (savedUser) {
+      loggedInUser = savedUser;
+      showMainScreen();
+    } else {
+      document.getElementById("loginSection").style.display = "block";
+      document.getElementById("mainSection").style.display = "none";
+    }
+  }
+
+  // 4. ログイン処理
+  function handleLogin() {
+    const inputVal = document.getElementById("loginInput").value.trim().toUpperCase();
+
+    if (!inputVal) {
+      alert("検査員コードを選択するか、入力してください。");
+      return;
+    }
+
+    // 判定: 「0000」 または 登録済みの検査員コード
+    if (inputVal === "0000" || registeredInspectors.includes(inputVal)) {
+      loggedInUser = inputVal;
+      localStorage.setItem("INSPECTOR_CODE", loggedInUser);
+      showMainScreen();
+    } else {
+      alert(`❌ エラー: 「${inputVal}」は無効なコードです。\n有効なコード: 0000 または ${registeredInspectors.join(", ")}`);
+    }
+  }
+
+  // 5. ログアウト処理
+  async function handleLogout() {
+    if (confirm("ログアウトしますか？")) {
+      localStorage.removeItem("INSPECTOR_CODE");
+      loggedInUser = "";
+
+      if (html5QrcodeScanner) {
+        try { await html5QrcodeScanner.stop(); } catch(e){}
+      }
+
+      document.getElementById("loginSection").style.display = "block";
+      document.getElementById("mainSection").style.display = "none";
+      document.getElementById("loginInput").value = "";
+      document.getElementById("loginSelect").value = "";
+    }
+  }
+
+  // 6. メイン画面の初期表示制御
+  function showMainScreen() {
+    document.getElementById("loginSection").style.display = "none";
+    document.getElementById("mainSection").style.display = "block";
+    
+    // ログインユーザー名表示（0000の場合は「汎用端末」と明記）
+    const dispName = (loggedInUser === "0000") ? "0000（汎用端末）" : `${loggedInUser}`;
+    document.getElementById("currentUserDisplay").innerText = dispName;
+
+    resetAll();
+  }
+
+  // 7. カメラ起動
   function startScanner() {
     isProcessing = false;
     html5QrcodeScanner = new Html5Qrcode("reader");
@@ -203,6 +364,7 @@
     });
   }
 
+  // 8. QR読み取りイベント処理
   async function onScanSuccess(decodedText) {
     if (isProcessing) return;
     isProcessing = true;
@@ -212,52 +374,52 @@
       // ステップ1: 製造番号QRの読み取り
       // ------------------------------------------------
       machineQrData = decodedText.trim();
-      
       document.getElementById("tagMachine").innerText = machineQrData;
       document.getElementById("scannedInfo").style.display = "block";
-      document.getElementById("stepGuide").innerText = "2. 検査員QRを読み取るか、リストから選択してください";
-      document.getElementById("stepGuide").style.background = "#feefc3";
-      document.getElementById("stepGuide").style.color = "#b06000";
 
-      // 検査員選択リストボックスを表示
-      document.getElementById("inspectorSelectContainer").style.display = "block";
+      if (loggedInUser === "0000") {
+        // 【ケースA: 汎用端末モード】➔ 従来通りステップ2（検査員入力）へ進む
+        document.getElementById("stepGuide").innerText = "2. 検査員QRを読み取るか、リストから選択してください";
+        document.getElementById("stepGuide").style.background = "#feefc3";
+        document.getElementById("stepGuide").style.color = "#b06000";
+        document.getElementById("inspectorSelectContainer").style.display = "block";
 
-      await html5QrcodeScanner.stop();
-      step = 2;
-      isProcessing = false;
-      startScanner();
+        await html5QrcodeScanner.stop();
+        step = 2;
+        isProcessing = false;
+        startScanner();
+
+      } else {
+        // 【ケースB: 個人ログインモード】➔ ステップ2をスキップし、ログイン中のコードで即登録！
+        await html5QrcodeScanner.stop();
+        await processSubmit(loggedInUser);
+      }
 
     } else if (step === 2) {
       // ------------------------------------------------
-      // ステップ2: 検査員QRの読み取り & バリデーション
+      // ステップ2: 汎用端末時の検査員QR読み取り
       // ------------------------------------------------
       const readVal = decodedText.trim().toUpperCase();
 
-      // チェック1: アルファベット1文字か
       const isSingleLetter = /^[A-Z]$/.test(readVal);
-      // チェック2: 登録済みリストに含まれているか
       const isRegistered = registeredInspectors.includes(readVal);
 
       if (!isSingleLetter || !isRegistered) {
-        // 条件に合致しないQR（他のQRなど）を読み込んだ場合は警告を出して再読み込み
         showStatus(`❌ エラー: 「${readVal}」は無効な検査員コードです。\n登録済みの検査員QR（半角英字1文字）をかざしてください。`, "ng");
         isProcessing = false;
-        return; // 次の判定に進まずそのままカメラ継続
+        return;
       }
 
-      // 正しい検査員コードが読み取れた場合
       document.getElementById("inspectorSelect").value = readVal;
       await processSubmit(readVal);
     }
   }
 
-  // ドロップダウンリストから手動選択された時の処理
+  // 汎用端末時にリストから選択された場合
   async function onInspectorSelectChange() {
     if (step !== 2) return;
     
-    const selectEl = document.getElementById("inspectorSelect");
-    const selectedVal = selectEl.value;
-
+    const selectedVal = document.getElementById("inspectorSelect").value;
     if (selectedVal) {
       isProcessing = true;
       if (html5QrcodeScanner) {
@@ -267,7 +429,7 @@
     }
   }
 
-  // 最終送信処理（スプレッドシートへの登録処理）
+  // 9. スプレッドシート登録送信処理
   async function processSubmit(inspectorCode) {
     inspectorIdData = inspectorCode;
     
