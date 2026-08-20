@@ -90,19 +90,32 @@
       display: inline-block;
       margin-bottom: 12px;
     }
-    
-    <!-- カメラ切替用ドロップダウン（追加） -->
-    <div id="cameraSelectContainer" style="display:none; margin-bottom: 10px; text-align: left;">
-      <label for="cameraSelect" style="font-size: 0.85rem; font-weight: bold; color: #5f6368; display: block; margin-bottom: 4px;">
-        📷 使用カメラ（レンズ）の切り替え:
-      </label>
-      <select id="cameraSelect" onchange="onCameraChange(this.value)" style="width: 100%; padding: 8px; font-size: 0.9rem; border-radius: 6px; border: 1px solid #ccc; background-color: #fff;">
-      </select>
-    </div>
-    
-    <!-- カメラ読み取り画面 -->
-    <div id="reader"></div>
-    
+
+    /* カメラ切替エリア */
+    .camera-select-area {
+      text-align: left;
+      margin-bottom: 10px;
+      background: #f8f9fa;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #dadce0;
+    }
+    .camera-select-area label {
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: #5f6368;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .camera-select-area select {
+      width: 100%;
+      padding: 8px;
+      font-size: 0.9rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background-color: #fff;
+    }
+
     #reader {
       width: 100%;
       border-radius: 12px;
@@ -135,7 +148,7 @@
       background-color: #fff;
     }
 
-    /* 新設: 検査詳細入力エリアのスタイル */
+    /* 検査詳細入力エリア */
     .detail-input-area {
       margin: 15px 0;
       padding: 15px;
@@ -271,6 +284,13 @@
 
     <div id="stepGuide" class="step-badge">1. 製造番号QRを読み取ってください</div>
 
+    <!-- カメラ選択UI（追加） -->
+    <div id="cameraSelectContainer" class="camera-select-area" style="display:none;">
+      <label for="cameraSelect">📷 使用カメラ（レンズ）の切り替え:</label>
+      <select id="cameraSelect" onchange="onCameraChange(this.value)">
+      </select>
+    </div>
+
     <!-- カメラ読み取り画面 -->
     <div id="reader"></div>
 
@@ -320,7 +340,7 @@
 </div>
 
 <script>
-  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyhLy41s43b2w9NPrwO4o87ZdCrNWZv_ZAfMHjlVh6rHQsvQ25NbvdEHCPmkgTWZeMz9g/exec";
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwmO35v4FveK_u-9wqi0tcfptCX8gpcBdtW0B1ejvZtKxqy5BFfXv-Z-rdljWeuPhiZFA/exec";
 
   let step = 1;
   let loggedInUser = "";
@@ -332,6 +352,7 @@
 
   let html5QrcodeScanner = null;
   let isProcessing = false;
+  let currentCameraId = localStorage.getItem("PREFERRED_CAMERA_ID") || "";
 
   let registeredInspectors = ["B", "G", "I", "J", "K", "P", "Q", "W", "X"];
 
@@ -433,9 +454,43 @@
     resetAll();
   }
 
-  function startScanner() {
+  // ----------------------------------------------------
+  // カメラ起動＆切り替え処理
+  // ----------------------------------------------------
+  async function startScanner() {
     isProcessing = false;
-    html5QrcodeScanner = new Html5Qrcode("reader");
+
+    try {
+      // 利用可能なカメラ一覧を取得してドロップダウンに設定
+      const devices = await Html5Qrcode.getCameras();
+
+      if (devices && devices.length > 0) {
+        const cameraSelect = document.getElementById("cameraSelect");
+        cameraSelect.innerHTML = "";
+
+        devices.forEach((device, index) => {
+          const opt = document.createElement("option");
+          opt.value = device.id;
+          opt.textContent = device.label || `カメラ ${index + 1}`;
+          cameraSelect.appendChild(opt);
+        });
+
+        document.getElementById("cameraSelectContainer").style.display = "block";
+
+        // 記憶されたIDが無い場合、最後のアウトカメラ（または1つ目）を初期選択
+        if (!currentCameraId || !devices.some(d => d.id === currentCameraId)) {
+          currentCameraId = devices[devices.length - 1].id;
+        }
+
+        cameraSelect.value = currentCameraId;
+      }
+    } catch (e) {
+      console.warn("カメラ一覧の取得に失敗しました", e);
+    }
+
+    if (!html5QrcodeScanner) {
+      html5QrcodeScanner = new Html5Qrcode("reader");
+    }
 
     const config = {
       fps: 15,
@@ -443,13 +498,31 @@
       aspectRatio: 1.0
     };
 
+    const cameraConfig = currentCameraId ? currentCameraId : { facingMode: "environment" };
+
     html5QrcodeScanner.start(
-      { facingMode: "environment" },
+      cameraConfig,
       config,
       onScanSuccess
     ).catch(err => {
       showStatus("❌ カメラ起動エラー: " + err, "ng");
     });
+  }
+
+  async function onCameraChange(newCameraId) {
+    if (!newCameraId || newCameraId === currentCameraId) return;
+
+    currentCameraId = newCameraId;
+    localStorage.setItem("PREFERRED_CAMERA_ID", currentCameraId);
+
+    if (html5QrcodeScanner) {
+      showStatus("⌛ カメラを切り替えています...", "loading");
+      try {
+        await html5QrcodeScanner.stop();
+      } catch (e) {}
+      document.getElementById("status").style.display = "none";
+      startScanner();
+    }
   }
 
   async function onScanSuccess(decodedText) {
@@ -473,7 +546,6 @@
         startScanner();
 
       } else {
-        // 個人端末の場合 ➔ 検査詳細選択エリアを表示
         inspectorIdData = loggedInUser;
         document.getElementById("tagInspector").innerText = inspectorIdData;
         document.getElementById("tagInspectorRow").style.display = "block";
@@ -536,7 +608,6 @@
     document.getElementById("dimValueInput").value = "";
   }
 
-  // メイン種別ボタン（OK, E寸, K寸, 打痕）の選択
   function selectType(type) {
     selectedCheckType = type;
 
@@ -550,11 +621,10 @@
 
     } else if (type === "E寸" || type === "K寸") {
       document.getElementById("subDimArea").style.display = "block";
-      selectSubState(""); // クリア
+      selectSubState("");
     }
   }
 
-  // E寸・K寸時のサブ状態（OK, 上げ, 下げ）の選択
   function selectSubState(state) {
     selectedSubState = state;
     document.getElementById("btnStateOK").className = "btn-opt " + (state === "OK" ? "active" : "");
@@ -562,7 +632,6 @@
     document.getElementById("btnStateSage").className = "btn-opt " + (state === "下げ" ? "active" : "");
   }
 
-  // E寸・K寸の確定登録処理
   function submitDimension() {
     if (!selectedSubState) {
       alert("「OK」「上げ」「下げ」のいずれかを選択してください。");
