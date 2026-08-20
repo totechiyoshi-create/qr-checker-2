@@ -90,7 +90,19 @@
       display: inline-block;
       margin-bottom: 12px;
     }
-
+    
+    <!-- カメラ切替用ドロップダウン（追加） -->
+    <div id="cameraSelectContainer" style="display:none; margin-bottom: 10px; text-align: left;">
+      <label for="cameraSelect" style="font-size: 0.85rem; font-weight: bold; color: #5f6368; display: block; margin-bottom: 4px;">
+        📷 使用カメラ（レンズ）の切り替え:
+      </label>
+      <select id="cameraSelect" onchange="onCameraChange(this.value)" style="width: 100%; padding: 8px; font-size: 0.9rem; border-radius: 6px; border: 1px solid #ccc; background-color: #fff;">
+      </select>
+    </div>
+    
+    <!-- カメラ読み取り画面 -->
+    <div id="reader"></div>
+    
     #reader {
       width: 100%;
       border-radius: 12px;
